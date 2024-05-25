@@ -1,3 +1,4 @@
+import { hashPassword } from '../helpers/authHelper.js';
 import userModel from '../models/userModel.js';
 
 //register
@@ -80,6 +81,7 @@ export const loginController = async(req, res) =>{
                 
             }, token
         });
+        
     }catch(error){
         console.log(error);
         res.status(404).send({success: false, message: 'Error in Login'});
@@ -88,4 +90,35 @@ export const loginController = async(req, res) =>{
 
 
 //forgot-password
-export const forgotPasswordController = async(req, res) =>{}
+export const forgotPasswordController = async(req, res) =>{
+    try{
+        const {email, answer, newPassword} = req.body;
+
+        if(!email){
+            return res.status(404).send({message: 'Email required'});
+        }
+        if(!answer){
+            return res.status(404).send({message: 'Answer required'});
+        }
+        if(!newPassword){
+            return res.status(404).send({message: 'New password required'});
+        }
+
+        //check user
+        const user = await userModel.findOne({email});
+
+        //validations
+        if(!user){
+            res.status(404).send({success: false, message: 'Invalid email or answer'});
+        }
+
+        //update password
+        const hashed = await hashPassword(newPassword);
+        await userModel.findByIdAndDelete(user_id, {password: hashed});
+        res.status(200).send({success: true, message: 'Password reset successfully'});
+
+    }catch(error){
+        console.log(error);
+        res.status(404).send({message: 'Error in password reset'});
+    }
+}
