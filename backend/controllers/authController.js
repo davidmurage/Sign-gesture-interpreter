@@ -31,7 +31,7 @@ export const registerController = async(req, res) =>{
 
         //if user exist
         if(existingUser){
-            res.send({message: 'User already exist. Please login'});
+            return res.send({message: 'User already exist. Please login'});
         }
 
         //hashing
@@ -81,7 +81,7 @@ export const loginController = async(req, res) =>{
                 
             }, token
         });
-        
+
     }catch(error){
         console.log(error);
         res.status(404).send({success: false, message: 'Error in Login'});
