@@ -1,5 +1,5 @@
 import express from "express";
-import { forgotPasswordController, loginController, registerController } from "../controllers/authController";
+import { forgotPasswordController, loginController, registerController } from "../controllers/authController.js";
 
 
 const router = express.Router();
@@ -13,3 +13,5 @@ router.post('/login', loginController);
 
 //FORGOT PASSWORD || POST
 router.post('/forgot-password', forgotPasswordController);
+
+export default router;

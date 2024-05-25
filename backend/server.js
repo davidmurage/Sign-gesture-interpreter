@@ -3,6 +3,7 @@ import colors from 'colors';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import connectDB from './config/db.js';
+import authRoutes from './routes/authRoute.js';
 import morgan from 'morgan';
 
 
