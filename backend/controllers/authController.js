@@ -1,6 +1,9 @@
 import { hashPassword } from '../helpers/authHelper.js';
 import userModel from '../models/userModel.js';
 
+import { comparePassword } from '../helpers/authHelper.js';
+import JWT from 'jsonwebtoken';
+
 //register
 export const registerController = async(req, res) =>{
     try{
@@ -8,22 +11,22 @@ export const registerController = async(req, res) =>{
 
         //validations
         if(!name){
-            res.send({message: 'Name required'})
+           return res.send({message: 'Name required'})
         }
         if(!email){
-            res.send({message: 'Email required'})
+           return res.send({message: 'Email required'})
         }
         if(!password){
-            res.send({message: 'Password required'})
+           return res.send({message: 'Password required'})
         }
         if(!phone){
-            res.send({message: 'Phone required'})
+           return res.send({message: 'Phone required'})
         }
         if(!address){
-            res.send({message: 'Address required'})
+           return res.send({message: 'Address required'})
         }
         if(!answer){
-            res.send({message: 'Answer required'})
+           return res.send({message: 'Answer required'})
         }
 
         //check user
@@ -53,23 +56,23 @@ export const loginController = async(req, res) =>{
         const {email, password} = req.body;
         //validation
         if(!email || !password){
-            res.status(404).send({success: false, message: 'Invalid email or password'});
+          return  res.status(404).send({success: false, message: 'Invalid email or password'});
         }
 
         //check user
         const user = await userModel.findOne({email});
         if(!user){
-            res.status(404).send({success: false, message:'User not found'});
+           return res.status(404).send({success: false, message:'User not found'});
         }
 
         //compare passwords
         const match = await comparePassword(password, user.password);
         if(!match){
-            res.status(404).send({success: false, message: 'Invalid password'});
+          return res.status(404).send({success: false, message: 'Invalid password'});
         }
 
         //generate token
-        const token = await JWT.sign({id: user_id}, process.env.JWT_SECRET, {expiresIn: '7d'});
+        const token = await JWT.sign({id: user._id}, process.env.JWT_SECRET, {expiresIn: '7d'});
 
         res.status(200).send({success: true, message: 'Login successfully',
             user:{
@@ -109,7 +112,7 @@ export const forgotPasswordController = async(req, res) =>{
 
         //validations
         if(!user){
-            res.status(404).send({success: false, message: 'Invalid email or answer'});
+           return res.status(404).send({success: false, message: 'Invalid email or answer'});
         }
 
         //update password
