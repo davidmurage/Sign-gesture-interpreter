@@ -1,36 +1,76 @@
-import React,{useState} from 'react';
-import Layout from '../components/Layout/Layout';
+import React, { useState, useRef } from 'react';
+import axios from 'axios';
+import Layout from "./../components/Layout/Layout";
 
-const HomePage = () => {
- const [stream, setStream] = useState(null);
-  const openCamera = async() =>{
-      try{
-        const stream = await navigator.mediaDevices.getUserMedia({video: true});
-        setStream(stream);
-      }catch(error){
-        console.log(error);
-      }
-  }
+function App() {
+  const [cameraOn, setCameraOn] = useState(false);
+  const [prediction, setPrediction] = useState('');
+  const videoRef = useRef(null);
+  let captureInterval;
+
+  const startCamera = () => {
+    setCameraOn(true);
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(stream => {
+        videoRef.current.srcObject = stream;
+        captureInterval = setInterval(captureFrame, 1000); // Capture a frame every second
+      })
+      .catch(err => {
+        console.error("Error accessing the camera", err);
+      });
+  };
+
+  const stopCamera = () => {
+    setCameraOn(false);
+    clearInterval(captureInterval);
+    let stream = videoRef.current.srcObject;
+    let tracks = stream.getTracks();
+
+    tracks.forEach(track => track.stop());
+    videoRef.current.srcObject = null;
+  };
+
+  const captureFrame = async () => {
+    const video = videoRef.current;
+    if (video) {
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext('2d');
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg');
+      const blob = await fetch(dataUrl).then(res => res.blob());
+      const file = new File([blob], 'frame.jpg', { type: 'image/jpeg' });
+      
+      const formData = new FormData();
+      formData.append('file', file);
+
+      axios.post('http://localhost:5000/predict', formData)
+        .then(response => {
+          setPrediction(response.data.prediction);
+        })
+        .catch(error => {
+          console.error('Error uploading image:', error);
+        });
+    }
+  };
+
   return (
     <Layout>
-      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '20px' }}>
-      <div style={{ width: '60%' }}>
-        <h2>Welcome to Camera App</h2>
-        <p>Click the start button to open your PC camera.</p>
+      <div className="App">
+      <h1>Sign Gesture Interpreter</h1>
+      <button onClick={startCamera}>Start</button>
+      <button onClick={stopCamera}>Stop</button>
+      <div>
+        {cameraOn && <video ref={videoRef} autoPlay />}
       </div>
-      <div style={{ width: '30%', display: 'flex', justifyContent: 'flex-end' }}>
-        <button onClick={openCamera} style={{ padding: '10px 20px', fontSize: '16px' }}>
-          Start
-        </button>
-      </div>
-      <div style={{ width: '100%', marginTop: '20px' }}>
-        {stream && <video autoPlay playsInline ref={video => {
-          if (video) video.srcObject = stream;
-        }} />}
+      <div>
+        <h2>Prediction: {prediction}</h2>
       </div>
     </div>
     </Layout>
-  )
+    
+  );
 }
 
-export default HomePage
+export default App;
