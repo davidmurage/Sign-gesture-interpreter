@@ -4,84 +4,90 @@ import numpy as np
 import math
 import tensorflow as tf
 
-# Initialize mediapipe for hand detection
+# Initialize mediapipe hand detection
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(max_num_hands=1)
-mp_draw = mp.solutions.drawing_utils
+mp_drawing = mp.solutions.drawing_utils
 
-# Load the pre-trained classification model
+# Load the classifier model
 model = tf.keras.models.load_model("Model/keras_model.h5")
 
 # Read the labels
 with open("Model/labels.txt", "r") as f:
-    labels = [line.strip() for line in f.readlines()]
+    labels = f.read().strip().split('\n')
 
 cap = cv2.VideoCapture(0)
 offset = 20
 imgSize = 300
+counter = 0
 
 while True:
     success, img = cap.read()
-    if not success:
-        break
-
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    result = hands.process(img_rgb)
-    img_output = img.copy()
-
-    if result.multi_hand_landmarks:
-        for hand_landmarks in result.multi_hand_landmarks:
+    imgOutput = img.copy()
+    imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    results = hands.process(imgRGB)
+    
+    if results.multi_hand_landmarks:
+        for hand_landmarks in results.multi_hand_landmarks:
             # Get bounding box coordinates
-            x_min, y_min = float('inf'), float('inf')
-            x_max, y_max = float('-inf'), float('-inf')
-
-            for lm in hand_landmarks.landmark:
-                x, y = int(lm.x * img.shape[1]), int(lm.y * img.shape[0])
-                x_min = min(x_min, x)
-                y_min = min(y_min, y)
-                x_max = max(x_max, x)
-                y_max = max(y_max, y)
-
-            # Add offset
-            x_min -= offset
-            y_min -= offset
-            x_max += offset
-            y_max += offset
-
-            # Crop the hand region
-            img_crop = img[y_min:y_max, x_min:x_max]
-            img_crop_shape = img_crop.shape
-
-            aspect_ratio = (y_max - y_min) / (x_max - x_min)
-
-            img_white = np.ones((imgSize, imgSize, 3), np.uint8) * 255
-
-            if aspect_ratio > 1:
-                k = imgSize / (y_max - y_min)
-                w_cal = math.ceil(k * (x_max - x_min))
-                img_resize = cv2.resize(img_crop, (w_cal, imgSize))
-                w_gap = math.ceil((imgSize - w_cal) / 2)
-                img_white[:, w_gap:w_cal + w_gap] = img_resize
-            else:
-                k = imgSize / (x_max - x_min)
-                h_cal = math.ceil(k * (y_max - y_min))
-                img_resize = cv2.resize(img_crop, (imgSize, h_cal))
-                h_gap = math.ceil((imgSize - h_cal) / 2)
-                img_white[h_gap:h_cal + h_gap, :] = img_resize
-
-            # Prediction
-            img_white_expanded = np.expand_dims(img_white, axis=0)
-            prediction = model.predict(img_white_expanded)
-            index = np.argmax(prediction)
+            h, w, c = img.shape
+            x_min, y_min = w, h
+            x_max, y_max = 0, 0
             
-            cv2.rectangle(img_output, (x_min - offset, y_min - offset - 70), (x_min - offset + 400, y_min - offset + 60 - 50), (0, 255, 0), cv2.FILLED)
-            cv2.putText(img_output, labels[index], (x_min, y_min - 30), cv2.FONT_HERSHEY_COMPLEX, 2, (0, 0, 0), 2)
-            cv2.rectangle(img_output, (x_min - offset, y_min - offset), (x_max + offset, y_max + offset), (0, 255, 0), 4)
+            for lm in hand_landmarks.landmark:
+                x, y = int(lm.x * w), int(lm.y * h)
+                if x < x_min:
+                    x_min = x
+                if x > x_max:
+                    x_max = x
+                if y < y_min:
+                    y_min = y
+                if y > y_max:
+                    y_max = y
+            
+            # Add offset
+            x, y, w, h = x_min - offset, y_min - offset, x_max - x_min + offset * 2, y_max - y_min + offset * 2
 
-            cv2.imshow('ImageCrop', img_crop)
-            cv2.imshow('ImageWhite', img_white)
+            imgWhite = np.ones((imgSize, imgSize, 3), np.uint8) * 255
 
-    cv2.imshow('Image', img_output)
+            imgCrop = img[y:y + h, x:x + w]
+            imgCropShape = imgCrop.shape
+
+            aspectRatio = h / w
+
+            if aspectRatio > 1:
+                k = imgSize / h
+                wCal = math.ceil(k * w)
+                imgResize = cv2.resize(imgCrop, (wCal, imgSize))
+                wGap = math.ceil((imgSize - wCal) / 2)
+                imgWhite[:, wGap: wCal + wGap] = imgResize
+            else:
+                k = imgSize / w
+                hCal = math.ceil(k * h)
+                imgResize = cv2.resize(imgCrop, (imgSize, hCal))
+                hGap = math.ceil((imgSize - hCal) / 2)
+                imgWhite[hGap: hCal + hGap, :] = imgResize
+
+            # Preprocess imgWhite for classification
+            imgWhite_resized = cv2.resize(imgWhite, (224, 224))  # Assuming the model expects 224x224 input size
+            imgWhite_resized = imgWhite_resized / 255.0  # Normalize to [0, 1]
+            imgWhite_resized = np.expand_dims(imgWhite_resized, axis=0)
+
+            # Predict the class
+            prediction = model.predict(imgWhite_resized)
+            index = np.argmax(prediction)
+            print(prediction, index)
+
+            cv2.rectangle(imgOutput, (x-offset, y-offset-70), (x -offset+400, y - offset+60-50), (0, 255, 0), cv2.FILLED)
+            cv2.putText(imgOutput, labels[index], (x, y-30), cv2.FONT_HERSHEY_COMPLEX, 2, (0, 0, 0), 2)
+            cv2.rectangle(imgOutput, (x-offset, y-offset), (x + w + offset, y + h + offset), (0, 255, 0), 4)
+            
+            mp_drawing.draw_landmarks(imgOutput, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+
+            cv2.imshow('ImageCrop', imgCrop)
+            cv2.imshow('ImageWhite', imgWhite)
+
+    cv2.imshow('Image', imgOutput)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
