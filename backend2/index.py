@@ -6,7 +6,7 @@ import tensorflow as tf
 app = Flask(__name__)
 
 # Load your pre-trained model (make sure to replace 'model.h5' with your model's filename)
-model = tf.keras.models.load_model('model.h5')
+model = tf.keras.models.load_model('Model/keras_model.h5', 'Model/labels.txt')
 
 @app.route('/predict', methods=['POST'])
 def predict():
