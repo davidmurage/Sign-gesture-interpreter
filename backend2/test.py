@@ -4,6 +4,15 @@ import numpy as np
 import math
 import tensorflow as tf
 
+# Custom function to handle DepthwiseConv2D layer
+def custom_depthwise_conv2d(**config):
+    if 'groups' in config:
+        config.pop('groups')
+    return tf.keras.layers.DepthwiseConv2D(**config)
+
+# Register the custom layer
+tf.keras.utils.get_custom_objects()['DepthwiseConv2D'] = custom_depthwise_conv2d
+
 # Initialize mediapipe hand detection
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(max_num_hands=1)
@@ -23,6 +32,9 @@ counter = 0
 
 while True:
     success, img = cap.read()
+    if not success:
+        break
+
     imgOutput = img.copy()
     imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     results = hands.process(imgRGB)
@@ -36,17 +48,14 @@ while True:
             
             for lm in hand_landmarks.landmark:
                 x, y = int(lm.x * w), int(lm.y * h)
-                if x < x_min:
-                    x_min = x
-                if x > x_max:
-                    x_max = x
-                if y < y_min:
-                    y_min = y
-                if y > y_max:
-                    y_max = y
+                x_min, x_max = min(x_min, x), max(x_max, x)
+                y_min, y_max = min(y_min, y), max(y_max, y)
             
-            # Add offset
-            x, y, w, h = x_min - offset, y_min - offset, x_max - x_min + offset * 2, y_max - y_min + offset * 2
+            # Add offset and ensure coordinates are within the image boundaries
+            x = max(0, x_min - offset)
+            y = max(0, y_min - offset)
+            w = min(img.shape[1], x_max - x_min + 2 * offset)
+            h = min(img.shape[0], y_max - y_min + 2 * offset)
 
             imgWhite = np.ones((imgSize, imgSize, 3), np.uint8) * 255
 
@@ -78,7 +87,7 @@ while True:
             index = np.argmax(prediction)
             print(prediction, index)
 
-            cv2.rectangle(imgOutput, (x-offset, y-offset-70), (x -offset+400, y - offset+60-50), (0, 255, 0), cv2.FILLED)
+            cv2.rectangle(imgOutput, (x-offset, y-offset-70), (x-offset+400, y-offset+60-50), (0, 255, 0), cv2.FILLED)
             cv2.putText(imgOutput, labels[index], (x, y-30), cv2.FONT_HERSHEY_COMPLEX, 2, (0, 0, 0), 2)
             cv2.rectangle(imgOutput, (x-offset, y-offset), (x + w + offset, y + h + offset), (0, 255, 0), 4)
             
