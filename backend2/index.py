@@ -1,4 +1,5 @@
 from flask import Flask, jsonify
+from flask_cors import CORS
 import threading
 import cv2
 import mediapipe as mp
@@ -7,6 +8,7 @@ import math
 import tensorflow as tf
 
 app = Flask(__name__)
+CORS(app)
 
 # Custom function to handle DepthwiseConv2D layer
 def custom_depthwise_conv2d(**config):
@@ -72,7 +74,7 @@ def hand_detection():
 
                 aspectRatio = h / w
 
-                if aspectRatio > 1:
+                if (aspectRatio > 1):
                     k = imgSize / h
                     wCal = math.ceil(k * w)
                     imgResize = cv2.resize(imgCrop, (wCal, imgSize))
@@ -95,9 +97,9 @@ def hand_detection():
                 index = np.argmax(prediction)
                 print(prediction, index)
 
-                cv2.rectangle(imgOutput, (x-offset, y-offset-70), (x-offset+400, y-offset+60-50), (0, 255, 0), cv2.FILLED)
-                cv2.putText(imgOutput, labels[index], (x, y-30), cv2.FONT_HERSHEY_COMPLEX, 2, (0, 0, 0), 2)
-                cv2.rectangle(imgOutput, (x-offset, y-offset), (x + w + offset, y + h + offset), (0, 255, 0), 4)
+                cv2.rectangle(imgOutput, (x - offset, y - offset - 70), (x - offset + 400, y - offset + 60 - 50), (0, 255, 0), cv2.FILLED)
+                cv2.putText(imgOutput, labels[index], (x, y - 30), cv2.FONT_HERSHEY_COMPLEX, 2, (0, 0, 0), 2)
+                cv2.rectangle(imgOutput, (x - offset, y - offset), (x + w + offset, y + h + offset), (0, 255, 0), 4)
 
                 mp_drawing.draw_landmarks(imgOutput, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
