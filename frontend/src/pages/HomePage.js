@@ -26,8 +26,15 @@ const App = () => {
     <Layout>
       <div>
         <h1>Sign-Gesture-Interpreter</h1>
+        
+        <div className='start'>
         <button onClick={startDetection}>Start</button>
-        <button onClick={stopDetection}>Stop</button>
+        </div>
+       
+       <div className='stop'>
+       <button onClick={stopDetection}>Stop</button>
+       </div>
+       
       </div>
     </Layout>
   );
