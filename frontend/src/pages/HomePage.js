@@ -1,5 +1,6 @@
 import React from 'react';
 import Layout from "./../components/Layout/Layout"
+import '../styles/Homepage.css'
 
 const App = () => {
   const startDetection = async () => {
@@ -26,7 +27,7 @@ const App = () => {
     <Layout>
       <div>
         <h1>Sign-Gesture-Interpreter</h1>
-        
+
         <div className='start'>
         <button onClick={startDetection}>Start</button>
         </div>
