@@ -25,9 +25,10 @@ const App = () => {
 
   return (
     <Layout>
-      <div>
+      <div className='container'>
         <h1>Sign-Gesture-Interpreter</h1>
 
+        <div className='right-side'>
         <div className='start'>
         <button onClick={startDetection}>Start</button>
         </div>
@@ -35,6 +36,13 @@ const App = () => {
        <div className='stop'>
        <button onClick={stopDetection}>Stop</button>
        </div>
+        </div>
+
+        <div className='left-side'>
+          <p></p>
+        </div>
+
+       
        
       </div>
     </Layout>
