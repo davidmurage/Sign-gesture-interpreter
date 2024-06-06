@@ -26,9 +26,15 @@ const App = () => {
   return (
     <Layout>
       <div className='container'>
-        <h1>Sign-Gesture-Interpreter</h1>
+        {/*<h1>Sign-Gesture-Interpreter</h1>*/}
 
-        <div className='right-side'>
+        <div className='left-side'>
+          <p>This is an <span>AI</span> that captures the hand gesture, through the camera of the Pc.<br/> After capturing the hand gesture 
+          it will later interpret it into a textual form.<br/> For interpretation to occur, a model is trained using tensorflow, and each gesture
+          is given a label. </p>
+        </div>
+
+        <div className='rigt-side'>
         <div className='start'>
         <button onClick={startDetection}>Start</button>
         </div>
@@ -38,9 +44,7 @@ const App = () => {
        </div>
         </div>
 
-        <div className='left-side'>
-          <p></p>
-        </div>
+       
 
        
        
