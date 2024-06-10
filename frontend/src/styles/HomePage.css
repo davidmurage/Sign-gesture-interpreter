@@ -1,38 +1,27 @@
-.container {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    padding: 20px;
-    margin-top: 30vh;
-  }
-  
-  .right-side {
-    display: flex;
-    flex-direction: row;
-    align-items: flex-start;
-    
-  }
-  
-  .left-side {
-    max-width: 30%;
-  }
-  
-  .left-side p {
-    font-size: 16px;
-    line-height: 1.5;
-  }
-  
-  .left-side span {
-    font-weight: bold;
-  }
-  
-  .right-side .start, .right-side .stop {
-    margin-bottom: 10px;
-  }
-  
-  button {
-    padding: 10px 20px;
-    font-size: 16px;
-    cursor: pointer;
-  }
-  
+/* src/WebcamComponent.css */
+
+.webcam-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.controls {
+  margin: 10px;
+}
+
+.controls button {
+  margin: 5px;
+  padding: 10px 20px;
+  font-size: 16px;
+}
+
+.webcam {
+  margin-top: 10px;
+}
+
+.label {
+  margin-top: 10px;
+  font-size: 20px;
+  font-weight: bold;
+}
