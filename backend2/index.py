@@ -5,18 +5,17 @@ import mediapipe as mp
 import numpy as np
 import math
 import tensorflow as tf
+import threading
 
 app = Flask(__name__)
 CORS(app)
 
-# Custom DepthwiseConv2D layer to handle the 'groups' argument
 class CustomDepthwiseConv2D(tf.keras.layers.DepthwiseConv2D):
     def __init__(self, **kwargs):
         if 'groups' in kwargs:
             kwargs.pop('groups')
         super().__init__(**kwargs)
 
-# Register the custom layer
 tf.keras.utils.get_custom_objects()['DepthwiseConv2D'] = CustomDepthwiseConv2D
 
 mp_hands = mp.solutions.hands
@@ -34,18 +33,20 @@ running = False
 @app.route('/start', methods=['POST'])
 def start_camera():
     global cap, running
-    if cap is None or not cap.isOpened():
+    if not running:
         cap = cv2.VideoCapture(0)
         running = True
+        threading.Thread(target=process_frame).start()
         return jsonify({'message': 'Camera started'}), 200
     return jsonify({'message': 'Camera already running'}), 200
 
 @app.route('/stop', methods=['POST'])
 def stop_camera():
     global cap, running
-    if cap and cap.isOpened():
-        cap.release()
+    if running:
         running = False
+        if cap and cap.isOpened():
+            cap.release()
         return jsonify({'message': 'Camera stopped'}), 200
     return jsonify({'message': 'Camera not running'}), 200
 
@@ -110,6 +111,7 @@ def process_frame():
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
+    cv2.destroyAllWindows()
 
 if __name__ == '__main__':
     app.run(debug=True)

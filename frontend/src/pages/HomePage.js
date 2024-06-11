@@ -1,7 +1,7 @@
 import React from 'react';
-import Layout from "./../components/Layout/Layout"
-import '../styles/Homepage.css'
-import axios from 'axios'
+import Layout from "./../components/Layout/Layout";
+import '../styles/Homepage.css';
+import axios from 'axios';
 
 function App() {
   const startCamera = () => {
@@ -26,10 +26,10 @@ function App() {
 
   return (
     <Layout>
-    <div className="App">
-      <button onClick={startCamera}>Start</button>
-      <button onClick={stopCamera}>Stop</button>
-    </div>
+      <div className="App">
+        <button onClick={startCamera}>Start</button>
+        <button onClick={stopCamera}>Stop</button>
+      </div>
     </Layout>
   );
 }

@@ -3,6 +3,7 @@ import mediapipe as mp
 import numpy as np
 import math
 import tensorflow as tf
+from collections import deque
 
 # Custom function to handle DepthwiseConv2D layer
 def custom_depthwise_conv2d(**config):
@@ -28,7 +29,9 @@ with open("Model/labels.txt", "r") as f:
 cap = cv2.VideoCapture(0)
 offset = 20
 imgSize = 300
-counter = 0
+
+# Buffer to store predictions for averaging
+prediction_buffer = deque(maxlen=10)  # Use a deque to keep the last 10 predictions
 
 while True:
     success, img = cap.read()
@@ -84,8 +87,12 @@ while True:
 
             # Predict the class
             prediction = model.predict(imgWhite_resized)
-            index = np.argmax(prediction)
-            print(prediction, index)
+            prediction_buffer.append(prediction[0])  # Store the prediction in the buffer
+
+            # Compute the average prediction
+            avg_prediction = np.mean(prediction_buffer, axis=0)
+            index = np.argmax(avg_prediction)
+            print(avg_prediction, index)
 
             cv2.rectangle(imgOutput, (x-offset, y-offset-70), (x-offset+400, y-offset+60-50), (0, 255, 0), cv2.FILLED)
             cv2.putText(imgOutput, labels[index], (x, y-30), cv2.FONT_HERSHEY_COMPLEX, 2, (0, 0, 0), 2)
