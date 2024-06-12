@@ -27,8 +27,14 @@ function App() {
   return (
     <Layout>
       <div className="App">
-        <button onClick={startCamera}>Start</button>
-        <button onClick={stopCamera}>Stop</button>
+        <p className="description">
+          This is a <span>Hand-gesture-interpreter</span>, that captures the hand gesture<br/> through the PC camera,<br/>
+          then interprets those gestures into a text form.
+        </p>
+        <div className="button-container">
+          <button onClick={startCamera} className="action-button">Start</button>
+          <button onClick={stopCamera} className="action-button">Stop</button>
+        </div>
       </div>
     </Layout>
   );

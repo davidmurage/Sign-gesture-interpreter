@@ -13,7 +13,7 @@ offset = 20
 imgSize = 300
 counter = 0
 
-folder = "Data/Okay"
+folder = "Data/Goodbye"
 
 while True:
     success, img = cap.read()

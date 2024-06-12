@@ -1,7 +1,7 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
 import cv2
-import mediapipe as mp
+import mediapipe as mp #for Palm Detection and Hand Landmark Model
 import numpy as np
 import math
 import tensorflow as tf
@@ -10,10 +10,12 @@ import threading
 app = Flask(__name__)
 CORS(app)
 
+#Custom DepthwiseConv2D Layer is used in the neural network model to reduce the number of parameters and computations
 class CustomDepthwiseConv2D(tf.keras.layers.DepthwiseConv2D):
     def __init__(self, **kwargs):
         if 'groups' in kwargs:
             kwargs.pop('groups')
+            
         super().__init__(**kwargs)
 
 tf.keras.utils.get_custom_objects()['DepthwiseConv2D'] = CustomDepthwiseConv2D
