@@ -4,7 +4,7 @@ import cv2
 import mediapipe as mp #for Palm Detection and Hand Landmark Model
 import numpy as np
 import math
-import tensorflow as tf
+import tensorflow as tf #classify the hand gestures
 import threading
 
 app = Flask(__name__)
