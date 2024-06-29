@@ -14,7 +14,7 @@ imgSize = 300
 counter = 0
 
 
-# folder to store your images
+# folder to store your images collected
 folder = "Data/Goodbye"
 
 while True:
