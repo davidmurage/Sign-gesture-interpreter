@@ -1,43 +1,48 @@
-import React from 'react';
-import Layout from "./../components/Layout/Layout";
+import React, { useState } from 'react';
 import '../styles/Homepage.css';
-import axios from 'axios';
 
-function App() {
-  const startCamera = () => {
-    axios.post('http://localhost:5000/start')
-      .then(response => {
-        console.log(response.data.message);
-      })
-      .catch(error => {
-        console.error('There was an error starting the camera!', error);
-      });
+const HomePage = () => {
+  const [interpretedText, setInterpretedText] = useState('');
+  const [cameraRunning, setCameraRunning] = useState(false);
+
+  const startCamera = async () => {
+    const response = await fetch('http://localhost:5000/start', { method: 'POST' });
+    const data = await response.json();
+    if (data.message === 'Camera started') {
+      setCameraRunning(true);
+    }
   };
 
-  const stopCamera = () => {
-    axios.post('http://localhost:5000/stop')
-      .then(response => {
-        console.log(response.data.message);
-      })
-      .catch(error => {
-        console.error('There was an error stopping the camera!', error);
-      });
+  const stopCamera = async () => {
+    const response = await fetch('http://localhost:5000/stop', { method: 'POST' });
+    const data = await response.json();
+    if (data.message === 'Camera stopped') {
+      setCameraRunning(false);
+    }
   };
 
   return (
-    <Layout>
-      <div className="App">
-        <p className="description">
-          This is a <span>Hand-gesture-interpreter</span>, that captures the hand gesture<br/> through the PC camera,<br/>
-          then interprets those gestures into a text form.
-        </p>
-        <div className="button-container">
-          <button onClick={startCamera} className="action-button">Start</button>
-          <button onClick={stopCamera} className="action-button">Stop</button>
-        </div>
+    <div className="App">
+      <header className="App-header">
+        <h1>Sign Gesture Interpreter</h1>
+      </header>
+      <div className="camera-feed">
+        <h2>Camera Feed</h2>
+        <p>Live camera feed will be displayed here.</p>
       </div>
-    </Layout>
+      <div className="controls">
+        {!cameraRunning ? (
+          <button onClick={startCamera}>Start Camera</button>
+        ) : (
+          <button onClick={stopCamera}>Stop Camera</button>
+        )}
+      </div>
+      <div className="interpreted-text">
+        <h2>Interpreted Text</h2>
+        <p>{interpretedText}</p>
+      </div>
+    </div>
   );
-}
+};
 
-export default App;
+export default HomePage;
