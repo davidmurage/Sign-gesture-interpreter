@@ -1,9 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import Webcam from 'react-webcam';
 import '../styles/Homepage.css';
+import Layout from "./../components/Layout/Layout"
 
 const HomePage = () => {
   const [interpretedText, setInterpretedText] = useState('');
   const [cameraRunning, setCameraRunning] = useState(false);
+  const webcamRef = useRef(null);
+
+  const videoConstraints = {
+    width: 640,
+    height: 480,
+    facingMode: 'user',
+  };
 
   const startCamera = async () => {
     const response = await fetch('http://localhost:5000/start', { method: 'POST' });
@@ -21,27 +30,58 @@ const HomePage = () => {
     }
   };
 
+  const captureImage = useCallback(async () => {
+    if (webcamRef.current && cameraRunning) {
+      const imageSrc = webcamRef.current.getScreenshot();
+      if (imageSrc) {
+        const response = await fetch('http://localhost:5000/interpret', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ image: imageSrc }),
+        });
+        const data = await response.json();
+        setInterpretedText(data.interpretedText);
+      }
+    }
+  }, [webcamRef, cameraRunning]);
+
+  useEffect(() => {
+    const interval = setInterval(captureImage, 1000);
+    return () => clearInterval(interval);
+  }, [captureImage]);
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <h1>Sign Gesture Interpreter</h1>
-      </header>
-      <div className="camera-feed">
-        <h2>Camera Feed</h2>
-        <p>Live camera feed will be displayed here.</p>
+    <Layout>
+      <div className="App">
+        <header className="App-header">
+          <h1>Sign Gesture Interpreter</h1>
+        </header>
+        <div className="camera-feed">
+          <h2>Camera Feed</h2>
+          {cameraRunning && (
+            <Webcam
+              audio={false}
+              ref={webcamRef}
+              screenshotFormat="image/jpeg"
+              videoConstraints={videoConstraints}
+            />
+          )}
+        </div>
+        <div className="controls">
+          {!cameraRunning ? (
+            <button onClick={startCamera}>Start Camera</button>
+          ) : (
+            <button onClick={stopCamera}>Stop Camera</button>
+          )}
+        </div>
+        <div className="interpreted-text">
+          <h2>Interpreted Text</h2>
+          <p>{interpretedText}</p>
+        </div>
       </div>
-      <div className="controls">
-        {!cameraRunning ? (
-          <button onClick={startCamera}>Start Camera</button>
-        ) : (
-          <button onClick={stopCamera}>Stop Camera</button>
-        )}
-      </div>
-      <div className="interpreted-text">
-        <h2>Interpreted Text</h2>
-        <p>{interpretedText}</p>
-      </div>
-    </div>
+    </Layout>
   );
 };
 
