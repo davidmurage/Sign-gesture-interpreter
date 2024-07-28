@@ -10,6 +10,7 @@ import base64
 from io import BytesIO
 from PIL import Image
 import re
+from collections import deque
 
 app = Flask(__name__)
 CORS(app)
@@ -34,6 +35,10 @@ with open("Model/labels.txt", "r") as f:
 
 cap = None
 running = False
+
+# Buffer to store last N predictions
+PREDICTION_BUFFER_SIZE = 10
+prediction_buffer = deque(maxlen=PREDICTION_BUFFER_SIZE)
 
 @app.route('/start', methods=['POST'])
 def start_camera():
@@ -86,7 +91,7 @@ def process_frame():
                 imgCrop = img[y:y + h, x:x + w]
                 aspectRatio = h / w
 
-                if aspectRatio > 1:
+                if (aspectRatio > 1):
                     k = 300 / h
                     wCal = math.ceil(k * w)
                     imgResize = cv2.resize(imgCrop, (wCal, 300))
@@ -105,10 +110,13 @@ def process_frame():
 
                 prediction = model.predict(imgWhite_resized)
                 index = np.argmax(prediction)
-                print(prediction, index)
+                confidence = prediction[0][index] * 100  # Convert to percentage
+                prediction_buffer.append(index)
+                most_common_prediction = max(set(prediction_buffer), key=prediction_buffer.count)
+                most_common_confidence = prediction[0][most_common_prediction] * 100
 
                 cv2.rectangle(imgOutput, (x-20, y-90), (x+380, y-50), (0, 255, 0), cv2.FILLED)
-                cv2.putText(imgOutput, labels[index], (x, y-30), cv2.FONT_HERSHEY_COMPLEX, 2, (0, 0, 0), 2)
+                cv2.putText(imgOutput, f'{labels[most_common_prediction]} {most_common_confidence:.2f}%', (x, y-30), cv2.FONT_HERSHEY_COMPLEX, 2, (0, 0, 0), 2)
                 cv2.rectangle(imgOutput, (x-20, y-20), (x + w + 20, y + h + 20), (0, 255, 0), 4)
                 
                 mp_drawing.draw_landmarks(imgOutput, hand_landmarks, mp_hands.HAND_CONNECTIONS)
@@ -147,7 +155,7 @@ def interpret():
             imgCrop = image[y:y + h, x:x + w]
             aspectRatio = h / w
 
-            if aspectRatio > 1:
+            if (aspectRatio > 1):
                 k = 300 / h
                 wCal = math.ceil(k * w)
                 imgResize = cv2.resize(imgCrop, (wCal, 300))
@@ -166,7 +174,11 @@ def interpret():
 
             prediction = model.predict(imgWhite_resized)
             index = np.argmax(prediction)
-            return jsonify({'interpretedText': labels[index]}), 200
+            confidence = prediction[0][index] * 100  # Convert to percentage
+            prediction_buffer.append(index)
+            most_common_prediction = max(set(prediction_buffer), key=prediction_buffer.count)
+            most_common_confidence = prediction[0][most_common_prediction] * 100
+            return jsonify({'interpretedText': labels[most_common_prediction], 'confidence': most_common_confidence}), 200
     return jsonify({'interpretedText': 'No hand detected'}), 200
 
 if __name__ == '__main__':

@@ -25,6 +25,8 @@ app.use(morgan('dev'));
 //routes
 app.use('/api/v1/auth', authRoutes);
 
+
+
 //rest Api
 app.get('/', (req, res) => {
     res.send('Api is running...');

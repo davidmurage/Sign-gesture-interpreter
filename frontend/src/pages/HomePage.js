@@ -1,11 +1,14 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import '../styles/Homepage.css';
-import Layout from "./../components/Layout/Layout"
+import Layout from "./../components/Layout/Layout";
 
 const HomePage = () => {
   const [interpretedText, setInterpretedText] = useState('');
   const [cameraRunning, setCameraRunning] = useState(false);
+  const [confidence, setConfidence] = useState('');
+
+
   const webcamRef = useRef(null);
 
   const videoConstraints = {
@@ -14,8 +17,12 @@ const HomePage = () => {
     facingMode: 'user',
   };
 
+  
+
+
   const startCamera = async () => {
-    const response = await fetch('http://localhost:5000/start', { method: 'POST' });
+
+    const response = await fetch('http://127.0.0.1:5000/start', { method: 'POST' });
     const data = await response.json();
     if (data.message === 'Camera started') {
       setCameraRunning(true);
@@ -23,7 +30,7 @@ const HomePage = () => {
   };
 
   const stopCamera = async () => {
-    const response = await fetch('http://localhost:5000/stop', { method: 'POST' });
+    const response = await fetch('http://127.0.0.1:5000/stop', { method: 'POST' });
     const data = await response.json();
     if (data.message === 'Camera stopped') {
       setCameraRunning(false);
@@ -34,7 +41,7 @@ const HomePage = () => {
     if (webcamRef.current && cameraRunning) {
       const imageSrc = webcamRef.current.getScreenshot();
       if (imageSrc) {
-        const response = await fetch('http://localhost:5000/interpret', {
+        const response = await fetch('http://127.0.0.1:5000/interpret', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -43,6 +50,7 @@ const HomePage = () => {
         });
         const data = await response.json();
         setInterpretedText(data.interpretedText);
+        setConfidence(data.confidence);
       }
     }
   }, [webcamRef, cameraRunning]);
@@ -55,9 +63,9 @@ const HomePage = () => {
   return (
     <Layout>
       <div className="App">
-        <header className="App-header">
+        {/*<header className="App-header">
           <h1>Sign Gesture Interpreter</h1>
-        </header>
+        </header>*/}
         <div className="camera-feed">
           <h2>Camera Feed</h2>
           {cameraRunning && (
@@ -78,7 +86,7 @@ const HomePage = () => {
         </div>
         <div className="interpreted-text">
           <h2>Interpreted Text</h2>
-          <p>{interpretedText}</p>
+          <p>{interpretedText} {confidence && `(${confidence.toFixed(2)}%)`}</p>
         </div>
       </div>
     </Layout>
