@@ -8,7 +8,6 @@ const HomePage = () => {
   const [cameraRunning, setCameraRunning] = useState(false);
   const [confidence, setConfidence] = useState('');
 
-
   const webcamRef = useRef(null);
 
   const videoConstraints = {
@@ -17,11 +16,7 @@ const HomePage = () => {
     facingMode: 'user',
   };
 
-  
-
-
   const startCamera = async () => {
-
     const response = await fetch('http://127.0.0.1:5000/start', { method: 'POST' });
     const data = await response.json();
     if (data.message === 'Camera started') {
@@ -63,30 +58,38 @@ const HomePage = () => {
   return (
     <Layout>
       <div className="App">
-        {/*<header className="App-header">
-          <h1>Sign Gesture Interpreter</h1>
-        </header>*/}
-        <div className="camera-feed">
-          <h2>Camera Feed</h2>
-          {cameraRunning && (
-            <Webcam
-              audio={false}
-              ref={webcamRef}
-              screenshotFormat="image/jpeg"
-              videoConstraints={videoConstraints}
-            />
-          )}
-        </div>
-        <div className="controls">
-          {!cameraRunning ? (
-            <button onClick={startCamera}>Start Camera</button>
-          ) : (
-            <button onClick={stopCamera}>Stop Camera</button>
-          )}
-        </div>
-        <div className="interpreted-text">
-          <h2>Interpreted Text</h2>
-          <p>{interpretedText} {confidence && `(${confidence.toFixed(2)}%)`}</p>
+        <div className="container">
+          <div className="left-section">
+            <p>
+              Welcome to the Hand Gesture Interpreter! This application captures hand gestures 
+              through your PC camera and interprets them into text using advanced machine learning models.
+              Click the button to start the camera and begin interpreting gestures.
+            </p>
+          </div>
+          <div className="right-section">
+            <div className="camera-feed">
+              <h2>Camera Feed</h2>
+              {cameraRunning && (
+                <Webcam
+                  audio={false}
+                  ref={webcamRef}
+                  screenshotFormat="image/jpeg"
+                  videoConstraints={videoConstraints}
+                />
+              )}
+            </div>
+            <div className="controls">
+              {!cameraRunning ? (
+                <button onClick={startCamera}>Start Camera</button>
+              ) : (
+                <button onClick={stopCamera}>Stop Camera</button>
+              )}
+            </div>
+            <div className="interpreted-text">
+             {/* <h2>Interpreted Text</h2>*/}
+              <p>{interpretedText} {confidence && `(${confidence.toFixed(2)}%)`}</p>
+            </div>
+          </div>
         </div>
       </div>
     </Layout>

@@ -178,8 +178,24 @@ def interpret():
             prediction_buffer.append(index)
             most_common_prediction = max(set(prediction_buffer), key=prediction_buffer.count)
             most_common_confidence = prediction[0][most_common_prediction] * 100
-            return jsonify({'interpretedText': labels[most_common_prediction], 'confidence': most_common_confidence}), 200
+            
+            # Integrate NLP processing here
+            interpreted_text = convert_to_text(labels[most_common_prediction])
+            
+            return jsonify({'interpretedText': interpreted_text, 'confidence': most_common_confidence}), 200
     return jsonify({'interpretedText': 'No hand detected'}), 200
+
+def convert_to_text(gesture_label):
+    # This function converts a gesture label to text using NLP logic or predefined mappings.
+    # Example: converting gesture labels to words or sentences
+    gesture_to_text = {
+        'Hello': 'Hello there!',
+        'Yes': 'Yes, I agree.',
+        'No': 'No, I disagree.',
+        'Thank you': 'Thank you very much.',
+        # Add more mappings as needed
+    }
+    return gesture_to_text.get(gesture_label, 'Gesture not recognized')
 
 if __name__ == '__main__':
     app.run(debug=True)
