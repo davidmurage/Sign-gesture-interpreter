@@ -57,6 +57,10 @@ node --check backend/server.js
 
 Tests mock camera, hand detection, and model inference; a camera and GPU are not required.
 
+## Meeting overlays
+
+For a local, selectable recognition overlay in Google Meet or Zoom Web App, see `extension/README.md`. For the native Zoom desktop side panel Local Test, see `zoom-app/README.md`. Both require an explicit Start, keep frames/results local to the configured inference service, and provide Copy only; they do not publish meeting chat or participant captions. Camera hardware may not permit simultaneous meeting video and recognition.
+
 ## Data and model limitations
 
 The bundled model is read-only project data. The repository contains a very small
