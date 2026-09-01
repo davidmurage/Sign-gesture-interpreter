@@ -5,18 +5,25 @@ import Layout from './../components/Layout/Layout';
 
 const INFERENCE_URL = (process.env.REACT_APP_INFERENCE_URL || 'http://127.0.0.1:5001').replace(/\/$/, '');
 const POLL_DELAY_MS = 1000;
+const KSL_POLL_DELAY_MS = 100;
 const REQUEST_TIMEOUT_MS = 8000;
+const KSL_VOCABULARY = ['me', 'you', 'friend', 'name', 'mine', 'who', 'how', 'please',
+  'help me', 'wait', 'now', 'home', 'where', 'give me', 'thank you', 'polite',
+  'hello', 'good', 'mother', 'father', 'uncle', 'cousin', 'brother', 'sister',
+  'daughter', 'parent', 'relative', 'yes', 'no', 'sorry'];
 
 const HomePage = () => {
   const [cameraRequested, setCameraRequested] = useState(false);
   const [result, setResult] = useState({ text: null, confidence: null });
   const [status, setStatus] = useState('Camera is stopped.');
   const [error, setError] = useState('');
+  const [provider, setProvider] = useState('static');
   const webcamRef = useRef(null);
   const timerRef = useRef(null);
   const requestRef = useRef(null);
   const activeRef = useRef(false);
   const sessionRef = useRef(0);
+  const streamIdRef = useRef('');
 
   const releaseCamera = useCallback(() => {
     const stream = webcamRef.current?.video?.srcObject;
@@ -46,7 +53,8 @@ const HomePage = () => {
     const image = webcamRef.current?.getScreenshot();
     if (!image) {
       if (activeRef.current && session === sessionRef.current) {
-        timerRef.current = setTimeout(() => captureImage(session), POLL_DELAY_MS);
+        timerRef.current = setTimeout(() => captureImage(session),
+          provider === 'ksl-experimental' ? KSL_POLL_DELAY_MS : POLL_DELAY_MS);
       }
       return;
     }
@@ -57,7 +65,9 @@ const HomePage = () => {
     try {
       const response = await fetch(`${INFERENCE_URL}/interpret`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image }), signal: controller.signal,
+        body: JSON.stringify({ image, provider,
+          ...(provider === 'ksl-experimental' ? { sessionId: streamIdRef.current } : {}) }),
+        signal: controller.signal,
       });
       let data;
       try {
@@ -79,7 +89,13 @@ const HomePage = () => {
           ? { text: data.text || data.label, confidence: data.confidence }
           : { text: null, confidence: null });
         setError('');
-        setStatus(data.handDetected ? 'Gesture recognized.' : 'No hand detected.');
+        const progress = Number.isInteger(data.progress) ? ` (${data.progress}/30 frames)` : '';
+        setStatus(data.handDetected ? 'Gesture recognized.'
+          : data.status === 'warming-up' ? `Collecting a KSL sequence${progress}.`
+            : data.status === 'stabilizing' ? 'Stabilizing the KSL prediction.'
+              : data.status === 'low-confidence' ? 'KSL sign was uncertain; keep signing or try again.'
+                : data.status === 'awaiting-reset' ? 'Lower your hands before signing the next word.'
+                  : 'No hand detected.');
       }
     } catch (requestError) {
       if (activeRef.current && session === sessionRef.current &&
@@ -99,13 +115,15 @@ const HomePage = () => {
       clearTimeout(timeout);
       if (requestRef.current === controller) requestRef.current = null;
       if (activeRef.current && session === sessionRef.current) {
-        timerRef.current = setTimeout(() => captureImage(session), POLL_DELAY_MS);
+        timerRef.current = setTimeout(() => captureImage(session),
+          provider === 'ksl-experimental' ? KSL_POLL_DELAY_MS : POLL_DELAY_MS);
       }
     }
-  }, []);
+  }, [provider]);
 
   const startCamera = () => {
     cancelSession();
+    streamIdRef.current = `web-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     setError('');
     setResult({ text: null, confidence: null });
     setStatus('Requesting camera permission...');
@@ -132,10 +150,25 @@ const HomePage = () => {
 
   return <Layout><main className="interpreter-page">
     <section className="interpreter-intro">
-      <h1>Static Sign Interpreter</h1>
-      <p>Show one supported static gesture at a time. Recognition is limited to the supplied model vocabulary.</p>
+      <h1>{provider === 'static' ? 'Static Sign Interpreter' : 'Experimental Kenyan Sign Language Interpreter'}</h1>
+      <p>{provider === 'static'
+        ? 'Show one supported static gesture at a time. Recognition is limited to the supplied model vocabulary.'
+        : 'Show one supported isolated KSL word at a time. This research model is experimental and does not translate continuous sentences.'}</p>
     </section>
     <section className="interpreter-panel" aria-label="Sign interpreter">
+      <div className="provider-control">
+        <label htmlFor="recognition-mode">Recognition mode</label>
+        <select id="recognition-mode" value={provider} disabled={cameraRequested}
+          onChange={(event) => { setProvider(event.target.value); setResult({ text: null, confidence: null }); }}>
+          <option value="static">Static gesture model</option>
+          <option value="ksl-experimental">Experimental Kenyan KSL (30 words)</option>
+        </select>
+      </div>
+      {provider === 'ksl-experimental' && <details className="vocabulary">
+        <summary>View supported KSL vocabulary</summary>
+        <p>{KSL_VOCABULARY.join(', ')}</p>
+        <p>Accuracy across different signers has not been independently validated.</p>
+      </details>}
       <div className="camera-feed">
         <h2>Camera Feed</h2>
         {cameraRequested && <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg"

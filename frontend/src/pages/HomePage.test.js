@@ -158,3 +158,24 @@ test('aborts a request at the timeout and retries only after it settles', async 
   act(() => jest.advanceTimersByTime(1000));
   expect(global.fetch).toHaveBeenCalledTimes(2);
 });
+
+test('KSL mode discloses vocabulary and sends a temporal session', async () => {
+  global.fetch.mockResolvedValue(response({ handDetected: false, label: null, text: null,
+    confidence: null, error: null, provider: 'ksl-experimental',
+    status: 'warming-up', progress: 1 }));
+  render(<HomePage />);
+  fireEvent.change(screen.getByLabelText('Recognition mode'),
+    { target: { value: 'ksl-experimental' } });
+  expect(screen.getByText('Experimental Kenyan Sign Language Interpreter')).toBeInTheDocument();
+  expect(screen.getByText(/Accuracy across different signers/)).toBeInTheDocument();
+  await start();
+  const payload = JSON.parse(global.fetch.mock.calls[0][1].body);
+  expect(payload.provider).toBe('ksl-experimental');
+  expect(payload.sessionId).toMatch(/^web-/);
+  expect(screen.getByText(/Collecting a KSL sequence \(1\/30 frames\)/)).toBeInTheDocument();
+  expect(screen.getByLabelText('Recognition mode')).toBeDisabled();
+  act(() => jest.advanceTimersByTime(99));
+  expect(global.fetch).toHaveBeenCalledTimes(1);
+  await act(async () => { jest.advanceTimersByTime(1); await Promise.resolve(); });
+  expect(global.fetch).toHaveBeenCalledTimes(2);
+});

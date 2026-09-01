@@ -17,6 +17,11 @@ from flask_cors import CORS
 from PIL import Image, UnidentifiedImageError
 from werkzeug.exceptions import RequestEntityTooLarge
 
+try:
+    from backend2.providers import KSL_LABELS, KslInferenceEngine
+except ModuleNotFoundError:  # Direct execution: python backend2/index.py
+    from providers import KSL_LABELS, KslInferenceEngine
+
 MODULE_DIR = Path(__file__).resolve().parent
 MODEL_DIR = MODULE_DIR / "Model"
 MAX_FRAME_BYTES = 5 * 1024 * 1024
@@ -25,6 +30,7 @@ MAX_IMAGE_WIDTH = 4096
 MAX_IMAGE_HEIGHT = 4096
 MAX_IMAGE_PIXELS = 12_000_000
 DATA_URL_RE = re.compile(r"^data:image/(?:jpeg|jpg|png|webp);base64,", re.IGNORECASE)
+SESSION_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 class FrameValidationError(ValueError):
@@ -113,9 +119,12 @@ class InferenceEngine:
             return self.labels[index], confidence
 
 
-def response_payload(hand_detected=False, label=None, text=None, confidence=None, error=None):
-    return {"handDetected": hand_detected, "label": label, "text": text,
-            "confidence": confidence, "error": error}
+def response_payload(hand_detected=False, label=None, text=None, confidence=None,
+                     error=None, **metadata):
+    payload = {"handDetected": hand_detected, "label": label, "text": text,
+               "confidence": confidence, "error": error}
+    payload.update(metadata)
+    return payload
 
 
 def decode_frame(payload):
@@ -146,14 +155,18 @@ def decode_frame(payload):
         raise FrameValidationError("Image data could not be decoded") from exc
 
 
-def create_app(engine=None, engine_factory=InferenceEngine):
+def create_app(engine=None, engine_factory=InferenceEngine, ksl_engine=None,
+               ksl_engine_factory=KslInferenceEngine):
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BYTES
     origins = [item.strip() for item in os.getenv(
         "CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
                if item.strip()]
-    CORS(app, resources={r"/interpret": {"origins": origins}})
+    CORS(app, resources={r"/interpret": {"origins": origins},
+                         r"/capabilities": {"origins": origins}})
     inference_engine = engine
+    temporal_engine = ksl_engine
+    ksl_initialization_failed = False
     initialization_lock = threading.Lock()
 
     def get_engine():
@@ -164,20 +177,70 @@ def create_app(engine=None, engine_factory=InferenceEngine):
                     inference_engine = engine_factory()
         return inference_engine
 
+    def get_ksl_engine():
+        nonlocal temporal_engine, ksl_initialization_failed
+        if ksl_initialization_failed:
+            raise RuntimeError("KSL provider initialization previously failed")
+        if temporal_engine is None:
+            with initialization_lock:
+                if temporal_engine is None:
+                    try:
+                        temporal_engine = ksl_engine_factory()
+                    except Exception:
+                        ksl_initialization_failed = True
+                        raise
+        return temporal_engine
+
+    @app.get("/capabilities")
+    def capabilities():
+        providers = [{"id": "static", "available": True, "experimental": False,
+                      "task": "isolated-static-gesture", "vocabulary": load_labels()}]
+        try:
+            providers.append(get_ksl_engine().capability)
+        except Exception:
+            app.logger.exception("KSL provider initialization failed")
+            providers.append({"id": "ksl-experimental", "available": False,
+                              "experimental": True, "task": "isolated-word-ksl",
+                              "sequenceLength": 30, "vocabulary": list(KSL_LABELS)})
+        return jsonify({"providers": providers})
+
     @app.errorhandler(413)
     def too_large(_error):
         return jsonify(response_payload(error="Frame payload is too large")), 413
 
     @app.post("/interpret")
     def interpret():
+        payload = request.get_json(silent=True)
+        provider = payload.get("provider", "static") if isinstance(payload, dict) else "static"
+        if provider not in ("static", "ksl-experimental"):
+            return jsonify(response_payload(error="Unknown inference provider")), 400
+        session_id = payload.get("sessionId") if isinstance(payload, dict) else None
+        if provider == "ksl-experimental" and not (
+                isinstance(session_id, str) and SESSION_ID_RE.fullmatch(session_id)):
+            return jsonify(response_payload(error="A valid KSL sessionId is required")), 400
         try:
-            image = decode_frame(request.get_json(silent=True))
+            image = decode_frame(payload)
         except RequestEntityTooLarge:
             return jsonify(response_payload(error="Frame payload is too large")), 413
         except FrameTooLargeError as exc:
             return jsonify(response_payload(error=str(exc))), 413
         except FrameValidationError as exc:
             return jsonify(response_payload(error=str(exc))), 400
+        if provider == "ksl-experimental":
+            try:
+                prediction = get_ksl_engine().infer(image, session_id)
+            except Exception:
+                app.logger.exception("KSL inference failed")
+                return jsonify(response_payload(
+                    error="KSL inference is temporarily unavailable",
+                    provider=provider, status="unavailable")), 503
+            if prediction.get("status") != "recognized":
+                return jsonify(response_payload(
+                    provider=provider, status=prediction.get("status", "abstained"),
+                    progress=prediction.get("progress", 0))), 200
+            return jsonify(response_payload(
+                True, prediction["label"], prediction["text"], prediction["confidence"],
+                provider=provider, status="recognized", progress=prediction["progress"])), 200
         try:
             prediction = get_engine().infer(image)
         except Exception:

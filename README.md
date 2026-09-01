@@ -1,10 +1,20 @@
 # Sign Gesture Interpreter
 
-This project uses the browser camera to classify one static hand gesture at a time with the supplied Keras model. It is not continuous sign-language translation and does not interpret motion, grammar, facial expression, or arbitrary signs.
+This project uses the browser camera with either the original static model or an
+opt-in experimental Kenyan Sign Language (KSL) temporal model. It is not
+continuous sign-language translation and does not interpret KSL grammar or
+arbitrary signs.
 
 ## Supported vocabulary
 
 `A`–`Z`, `Yes`, `Hello`, `Thankyou`, `No`, `Okay`, and `Bathroom`. Results are limited by the supplied model and its training data; no accuracy guarantee is implied.
+
+Experimental KSL mode recognizes these isolated words: `me`, `you`, `friend`,
+`name`, `mine`, `who`, `how`, `please`, `help-me`, `wait`, `now`, `home`,
+`where`, `give-me`, `thank-you`, `polite`, `hello`, `good`, `mother`, `father`,
+`uncle`, `cousing`, `brother`, `sister`, `doughter`, `parent`, `relative`,
+`yes`, `no`, and `sorry`. The upstream misspellings are retained internally to
+preserve model label order but displayed as “Cousin” and “Daughter.”
 
 ## Prerequisites and setup
 
@@ -46,6 +56,12 @@ allowlist of frontend origins; its safe default permits only local port 3000.
 Model assets are resolved relative to `backend2/index.py`, independently of the
 launch directory.
 
+Select **Experimental Kenyan KSL** in the frontend to use the temporal provider.
+It needs at least 30 consecutive tracked frames and three stable predictions.
+`KSL_CONFIDENCE_THRESHOLD` (default `0.70`) and `KSL_STABILITY_FRAMES` (default
+`3`) may be set in the inference process environment. Do not put them in
+`backend/.env`; that file belongs to the authentication backend.
+
 ## Test
 
 ```powershell
@@ -59,11 +75,23 @@ Tests mock camera, hand detection, and model inference; a camera and GPU are not
 
 ## Meeting overlays
 
-For a local, selectable recognition overlay in Google Meet or Zoom Web App, see `extension/README.md`. For the native Zoom desktop side panel Local Test, see `zoom-app/README.md`. Both require an explicit Start, keep frames/results local to the configured inference service, and provide Copy only; they do not publish meeting chat or participant captions. Camera hardware may not permit simultaneous meeting video and recognition.
+For a local, selectable recognition overlay in Google Meet or Zoom Web App, see
+`extension/README.md`. For the native Zoom desktop side panel Local Test, see
+`zoom-app/README.md`. Both offer static and experimental KSL modes, require an
+explicit Start, keep frames/results local to the configured inference service,
+and provide Copy only; they do not publish meeting chat or participant captions.
+Warm-up, unstable, low-confidence, and unsupported results are never copyable.
+Camera hardware may not permit simultaneous meeting video and recognition.
 
 ## Data and model limitations
 
-The bundled model is read-only project data. The repository contains a very small
+The original bundled model is read-only project data. The repository contains a very small
 sample image set, but no reproducible training pipeline, provenance details,
-validation split, or accuracy metrics. Dynamic signing is unsupported.
-Predictions are demonstrations, not authoritative translations.
+validation split, or accuracy metrics. Predictions are demonstrations, not
+authoritative translations.
+
+The experimental KSL checkpoint and provenance manifest are in
+`backend2/models/ksl-lstm-v1`. It comes from Ibrahim Shedoh's MIT-described open
+research repository. Its accuracy, signer-independent generalization,
+calibration, and KSL-expert validation have not been established. The unchanged
+upstream artifact is SHA-256 checked before its weights are loaded.

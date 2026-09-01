@@ -5,11 +5,14 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
   const DEFAULT_DELAY = 1000;
+  const KSL_DELAY = 100;
   const DEFAULT_TIMEOUT = 8000;
 
   function validateResponse(data) {
     if (!data || typeof data.handDetected !== 'boolean') throw new Error('protocol');
     if (data.handDetected && typeof (data.text || data.label) !== 'string') throw new Error('protocol');
+    if (data.provider === 'ksl-experimental' && data.status !== 'recognized')
+      return { text: null, confidence: null };
     return data.handDetected
       ? { text: data.text || data.label, confidence: Number.isFinite(data.confidence) ? data.confidence : null }
       : { text: null, confidence: null };
@@ -26,10 +29,10 @@
     const delay = options.pollDelayMs || DEFAULT_DELAY;
     const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT;
     const emit = options.onState || function () {};
-    let session = 0, active = false, starting = false, timer = null, request = null;
+    let session = 0, active = false, starting = false, timer = null, request = null, streamId = '';
     let state = { active: false, status: 'Camera is stopped.', text: null, visibleText: '', confidence: null, error: '' };
     const update = (next) => { state = { ...state, ...next }; emit({ ...state }); };
-    const schedule = (id) => { if (active && id === session) timer = timers.setTimeout(() => poll(id), delay); };
+    const schedule = (id) => { if (active && id === session) { const provider = typeof options.provider === 'function' ? options.provider() : (options.provider || 'static'); timer = timers.setTimeout(() => poll(id), provider === 'ksl-experimental' ? KSL_DELAY : delay); } };
 
     async function poll(id) {
       if (!active || id !== session || request) return;
@@ -42,9 +45,19 @@
       request = controller;
       const timeout = timers.setTimeout(() => controller.abort(), timeoutMs);
       try {
-        const data = await transport(image, controller.signal);
+        const provider = typeof options.provider === 'function' ? options.provider() : (options.provider || 'static');
+        const data = await transport(image, controller.signal, { provider,
+          ...(provider === 'ksl-experimental' ? { sessionId: streamId } : {}) });
         const result = validateResponse(data);
-        if (active && id === session && request === controller) update({ ...result, visibleText: visibleText(result), error: '', status: result.text ? 'Gesture recognized.' : 'No hand detected.' });
+        if (active && id === session && request === controller) {
+          const kslStatus = data.provider === 'ksl-experimental' && !result.text
+            ? data.status === 'warming-up' ? `Collecting a KSL sequence (${data.progress || 0}/30 frames).`
+              : data.status === 'stabilizing' ? 'Stabilizing the KSL prediction.'
+                : data.status === 'low-confidence' ? 'KSL sign was uncertain; try again.'
+                  : data.status === 'awaiting-reset' ? 'Lower your hands before signing the next word.'
+                    : 'No hands detected.' : null;
+          update({ ...result, visibleText: visibleText(result), error: '', status: result.text ? 'Gesture recognized.' : (kslStatus || 'No hand detected.') });
+        }
       } catch (error) {
         if (active && id === session && request === controller) {
           const message = error && error.name === 'AbortError' ? 'The inference request timed out. Retrying…'
@@ -64,6 +77,7 @@
       starting = true;
       await stop();
       const id = session;
+      streamId = `meeting-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       update({ active: false, text: null, visibleText: '', confidence: null, error: '', status: 'Requesting camera permission…' });
       try {
         await camera.start();
@@ -92,5 +106,5 @@
     }
     return { start, stop, copy, getState: () => ({ ...state }), validateResponse };
   }
-  return { createController, validateResponse, visibleText, DEFAULT_DELAY, DEFAULT_TIMEOUT };
+  return { createController, validateResponse, visibleText, DEFAULT_DELAY, KSL_DELAY, DEFAULT_TIMEOUT };
 });

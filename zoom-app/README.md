@@ -2,4 +2,14 @@
 
 Install Node.js 18 or newer, run `npm start` from `zoom-app`, expose `http://127.0.0.1:3001` through a private HTTPS development tunnel, and use that HTTPS URL as the Home URL of a Zoom **General App** Local Test. Add the same tunnel hostname to the app's Zoom domain allowlist and enable the `zoomapp:inmeeting` scope. The panel uses Zoom Apps SDK `0.16.0` and no Zoom REST credentials or participant-data scopes.
 
-Launch the app from a desktop Zoom meeting and press **Start**. `INFERENCE_URL` is restricted to loopback HTTP; copy `.env.example` values into the process environment if changing its local port. The tunneled page uses a per-process CSRF token and same-origin checks, but the tunnel is still an Internet-facing entrance: use access controls offered by the tunnel provider, do not share its URL, and stop it after testing. The app does not publish chat or captions. Camera sharing depends on the device/driver; disable meeting video or use a second camera when needed. Marketplace submission and public tunnel deployment are outside this local setup.
+Launch the app from a desktop Zoom meeting, select the static model or
+**Experimental Kenyan KSL**, and press **Start**. KSL mode recognizes only its
+documented 30 isolated words and suppresses warm-up or uncertain results.
+`INFERENCE_URL` is restricted to loopback HTTP; copy `.env.example` values into
+the process environment if changing its local port. The tunneled page uses a
+per-process CSRF token and same-origin checks, but the tunnel is still an
+Internet-facing entrance: use access controls offered by the tunnel provider,
+do not share its URL, and stop it after testing. The app does not publish chat
+or captions. Camera sharing depends on the device/driver; disable meeting video
+or use a second camera when needed. Marketplace submission and public tunnel
+deployment are outside this local setup.

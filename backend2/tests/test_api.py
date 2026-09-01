@@ -25,6 +25,18 @@ class FakeEngine:
             raise self.error
         return self.result
 
+class FakeKslEngine:
+    capability = {"id": "ksl-experimental", "available": True,
+                  "experimental": True, "task": "isolated-word-ksl",
+                  "sequenceLength": 30, "vocabulary": ["hello"]}
+    def __init__(self, result=None, error=None):
+        self.result, self.error, self.calls = result, error, []
+    def infer(self, image, session_id):
+        self.calls.append((image.shape, session_id))
+        if self.error:
+            raise self.error
+        return self.result or {"status": "warming-up", "progress": 1}
+
 class ApiTests(unittest.TestCase):
     def client(self, engine):
         app = create_app(engine)
@@ -109,6 +121,46 @@ class ApiTests(unittest.TestCase):
         for thread in threads: thread.join()
         self.assertEqual(statuses, [200] * 4)
         self.assertEqual(len(calls), 1)
+
+    def test_ksl_warmup_and_recognition_are_additive_to_stable_schema(self):
+        ksl = FakeKslEngine()
+        client = create_app(FakeEngine(), ksl_engine=ksl).test_client()
+        warmup = client.post("/interpret", json={"image": image_url(),
+            "provider": "ksl-experimental", "sessionId": "web-1"})
+        self.assertEqual(warmup.status_code, 200)
+        self.assertEqual(warmup.get_json()["status"], "warming-up")
+        self.assertFalse(warmup.get_json()["handDetected"])
+        ksl.result = {"status": "recognized", "progress": 30, "label": "hello",
+                      "text": "Hello", "confidence": 88.0}
+        recognized = client.post("/interpret", json={"image": image_url(),
+            "provider": "ksl-experimental", "sessionId": "web-1"}).get_json()
+        self.assertEqual((recognized["handDetected"], recognized["text"],
+                          recognized["provider"], recognized["status"]),
+                         (True, "Hello", "ksl-experimental", "recognized"))
+
+    def test_ksl_requires_safe_session_and_reports_failure_without_secrets(self):
+        client = create_app(FakeEngine(), ksl_engine=FakeKslEngine()).test_client()
+        for session_id in (None, "", "bad session", "x" * 65):
+            response = client.post("/interpret", json={"image": image_url(),
+                "provider": "ksl-experimental", "sessionId": session_id})
+            self.assertEqual(response.status_code, 400)
+        failing = create_app(FakeEngine(), ksl_engine=FakeKslEngine(
+            error=RuntimeError("secret path"))).test_client().post(
+                "/interpret", json={"image": image_url(),
+                "provider": "ksl-experimental", "sessionId": "web-1"})
+        self.assertEqual(failing.status_code, 503)
+        self.assertNotIn("secret path", failing.get_data(as_text=True))
+
+    def test_capabilities_and_unavailable_ksl_provider(self):
+        available = create_app(FakeEngine(), ksl_engine=FakeKslEngine()).test_client().get(
+            "/capabilities").get_json()["providers"]
+        self.assertEqual([provider["id"] for provider in available],
+                         ["static", "ksl-experimental"])
+        app = create_app(FakeEngine(), ksl_engine_factory=lambda: (_ for _ in ()).throw(
+            ValueError("artifact detail")))
+        response = app.test_client().get("/capabilities")
+        self.assertFalse(response.get_json()["providers"][1]["available"])
+        self.assertNotIn("artifact detail", response.get_data(as_text=True))
 
 
 class FakeHands:
