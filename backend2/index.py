@@ -1,201 +1,198 @@
-from flask import Flask, jsonify, request
-from flask_cors import CORS
+"""Browser-frame inference API for the supplied static gesture model."""
+import base64
+import binascii
+import math
+import os
+import re
+import threading
+from io import BytesIO
+from pathlib import Path
+
 import cv2
 import mediapipe as mp
 import numpy as np
-import math
 import tensorflow as tf
-import threading
-import base64
-from io import BytesIO
-from PIL import Image
-import re
-from collections import deque
+from flask import Flask, jsonify, request
+from flask_cors import CORS
+from PIL import Image, UnidentifiedImageError
+from werkzeug.exceptions import RequestEntityTooLarge
 
-app = Flask(__name__)
-CORS(app)
+MODULE_DIR = Path(__file__).resolve().parent
+MODEL_DIR = MODULE_DIR / "Model"
+MAX_FRAME_BYTES = 5 * 1024 * 1024
+MAX_REQUEST_BYTES = 8 * 1024 * 1024
+MAX_IMAGE_WIDTH = 4096
+MAX_IMAGE_HEIGHT = 4096
+MAX_IMAGE_PIXELS = 12_000_000
+DATA_URL_RE = re.compile(r"^data:image/(?:jpeg|jpg|png|webp);base64,", re.IGNORECASE)
+
+
+class FrameValidationError(ValueError):
+    """Safe client-facing invalid frame error."""
+
+
+class FrameTooLargeError(FrameValidationError):
+    """Decoded frame or image dimensions exceed safe limits."""
+
 
 class CustomDepthwiseConv2D(tf.keras.layers.DepthwiseConv2D):
     def __init__(self, **kwargs):
-        if 'groups' in kwargs:
-            kwargs.pop('groups')
-            
+        kwargs.pop("groups", None)
         super().__init__(**kwargs)
 
-tf.keras.utils.get_custom_objects()['DepthwiseConv2D'] = CustomDepthwiseConv2D
 
-mp_hands = mp.solutions.hands
-hands = mp_hands.Hands(max_num_hands=1)
-mp_drawing = mp.solutions.drawing_utils
+tf.keras.utils.get_custom_objects()["DepthwiseConv2D"] = CustomDepthwiseConv2D
 
-model = tf.keras.models.load_model("Model/keras_model.h5")
 
-with open("Model/labels.txt", "r") as f:
-    labels = f.read().strip().split('\n')
+def load_labels(path=MODEL_DIR / "labels.txt"):
+    with Path(path).open(encoding="utf-8") as label_file:
+        labels = [re.sub(r"^\s*\d+\s+", "", line.strip())
+                  for line in label_file if line.strip()]
+    if not labels or any(not label for label in labels):
+        raise ValueError("Label file is empty or invalid")
+    return labels
 
-cap = None
-running = False
 
-# Buffer to store last N predictions
-PREDICTION_BUFFER_SIZE = 10
-prediction_buffer = deque(maxlen=PREDICTION_BUFFER_SIZE)
+def prediction_text(label):
+    return {"Hello": "Hello there!", "Yes": "Yes, I agree.", "No": "No, I disagree.",
+            "Thankyou": "Thank you very much."}.get(label, label)
 
-@app.route('/start', methods=['POST'])
-def start_camera():
-    global cap, running
-    if not running:
-        cap = cv2.VideoCapture(0)
-        running = True
-        threading.Thread(target=process_frame).start()
-        return jsonify({'message': 'Camera started'}), 200
-    return jsonify({'message': 'Camera already running'}), 200
 
-@app.route('/stop', methods=['POST'])
-def stop_camera():
-    global cap, running
-    if running:
-        running = False
-        if cap and cap.isOpened():
-            cap.release()
-        return jsonify({'message': 'Camera stopped'}), 200
-    return jsonify({'message': 'Camera not running'}), 200
+class InferenceEngine:
+    def __init__(self, model=None, hands=None, labels=None):
+        self.model = model if model is not None else tf.keras.models.load_model(
+            str(MODEL_DIR / "keras_model.h5"))
+        self.hands = hands if hands is not None else mp.solutions.hands.Hands(max_num_hands=1)
+        self.labels = labels if labels is not None else load_labels()
+        if not self.labels:
+            raise ValueError("At least one model label is required")
+        self.lock = threading.Lock()
 
-def process_frame():
-    global cap, running
-    while running:
-        success, img = cap.read()
-        if not success:
-            continue
+    def infer(self, rgb_image):
+        with self.lock:
+            results = self.hands.process(rgb_image)
+            detected = getattr(results, "multi_hand_landmarks", None)
+            if not detected:
+                return None
+            landmarks = getattr(detected[0], "landmark", None)
+            if not landmarks:
+                return None
+            height, width = rgb_image.shape[:2]
+            xs = [max(0, min(width - 1, int(point.x * width))) for point in landmarks]
+            ys = [max(0, min(height - 1, int(point.y * height))) for point in landmarks]
+            left = max(0, min(xs) - 20)
+            top = max(0, min(ys) - 20)
+            right = min(width, max(xs) + 21)
+            bottom = min(height, max(ys) + 21)
+            if right <= left or bottom <= top:
+                return None
+            crop = rgb_image[top:bottom, left:right]
+            if crop.size == 0:
+                return None
 
-        imgOutput = img.copy()
-        imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        results = hands.process(imgRGB)
-        
-        if results.multi_hand_landmarks:
-            for hand_landmarks in results.multi_hand_landmarks:
-                h, w, c = img.shape
-                x_min, y_min = w, h
-                x_max, y_max = 0, 0
-                
-                for lm in hand_landmarks.landmark:
-                    x, y = int(lm.x * w), int(lm.y * h)
-                    x_min, x_max = min(x_min, x), max(x_max, x)
-                    y_min, y_max = min(y_min, y), max(y_max, y)
-                
-                x = max(0, x_min - 20)
-                y = max(0, y_min - 20)
-                w = min(img.shape[1], x_max - x_min + 40)
-                h = min(img.shape[0], y_max - y_min + 40)
+            crop_h, crop_w = crop.shape[:2]
+            canvas = np.full((300, 300, 3), 255, dtype=np.uint8)
+            scale = min(300 / crop_w, 300 / crop_h)
+            resized_w = max(1, min(300, math.ceil(crop_w * scale)))
+            resized_h = max(1, min(300, math.ceil(crop_h * scale)))
+            resized = cv2.resize(crop, (resized_w, resized_h))
+            x_gap, y_gap = (300 - resized_w) // 2, (300 - resized_h) // 2
+            canvas[y_gap:y_gap + resized_h, x_gap:x_gap + resized_w] = resized
+            tensor = np.expand_dims(
+                cv2.resize(canvas, (224, 224)).astype(np.float32) / 255.0, 0)
+            raw_prediction = np.asarray(self.model.predict(tensor, verbose=0))
+            if raw_prediction.ndim != 2 or raw_prediction.shape != (1, len(self.labels)):
+                raise ValueError("Model output does not match label count")
+            scores = raw_prediction[0]
+            if not np.all(np.isfinite(scores)):
+                raise ValueError("Model returned non-finite scores")
+            index = int(np.argmax(scores))
+            confidence = float(scores[index] * 100)
+            if not math.isfinite(confidence):
+                raise ValueError("Model returned invalid confidence")
+            return self.labels[index], confidence
 
-                imgWhite = np.ones((300, 300, 3), np.uint8) * 255
-                imgCrop = img[y:y + h, x:x + w]
-                aspectRatio = h / w
 
-                if (aspectRatio > 1):
-                    k = 300 / h
-                    wCal = math.ceil(k * w)
-                    imgResize = cv2.resize(imgCrop, (wCal, 300))
-                    wGap = math.ceil((300 - wCal) / 2)
-                    imgWhite[:, wGap: wCal + wGap] = imgResize
-                else:
-                    k = 300 / w
-                    hCal = math.ceil(k * h)
-                    imgResize = cv2.resize(imgCrop, (300, hCal))
-                    hGap = math.ceil((300 - hCal) / 2)
-                    imgWhite[hGap: hCal + hGap, :] = imgResize
+def response_payload(hand_detected=False, label=None, text=None, confidence=None, error=None):
+    return {"handDetected": hand_detected, "label": label, "text": text,
+            "confidence": confidence, "error": error}
 
-                imgWhite_resized = cv2.resize(imgWhite, (224, 224))
-                imgWhite_resized = imgWhite_resized / 255.0
-                imgWhite_resized = np.expand_dims(imgWhite_resized, axis=0)
 
-                prediction = model.predict(imgWhite_resized)
-                index = np.argmax(prediction)
-                confidence = prediction[0][index] * 100  # Convert to percentage
-                prediction_buffer.append(index)
-                most_common_prediction = max(set(prediction_buffer), key=prediction_buffer.count)
-                most_common_confidence = prediction[0][most_common_prediction] * 100
+def decode_frame(payload):
+    if not isinstance(payload, dict) or not isinstance(payload.get("image"), str):
+        raise FrameValidationError("A base64 image data URL is required")
+    encoded = DATA_URL_RE.sub("", payload["image"], count=1)
+    if encoded == payload["image"]:
+        raise FrameValidationError("Image must be a JPEG, PNG, or WebP data URL")
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise FrameValidationError("Image data is not valid base64") from exc
+    if not raw:
+        raise FrameValidationError("Image is empty")
+    if len(raw) > MAX_FRAME_BYTES:
+        raise FrameTooLargeError("Decoded frame is too large")
+    try:
+        with Image.open(BytesIO(raw)) as image:
+            width, height = image.size
+            if (width <= 0 or height <= 0 or width > MAX_IMAGE_WIDTH or
+                    height > MAX_IMAGE_HEIGHT or width * height > MAX_IMAGE_PIXELS):
+                raise FrameTooLargeError("Image dimensions are too large")
+            image.load()
+            return np.asarray(image.convert("RGB"))
+    except FrameTooLargeError:
+        raise
+    except (Image.DecompressionBombError, UnidentifiedImageError, OSError, ValueError) as exc:
+        raise FrameValidationError("Image data could not be decoded") from exc
 
-                cv2.rectangle(imgOutput, (x-20, y-90), (x+380, y-50), (0, 255, 0), cv2.FILLED)
-                cv2.putText(imgOutput, f'{labels[most_common_prediction]} {most_common_confidence:.2f}%', (x, y-30), cv2.FONT_HERSHEY_COMPLEX, 2, (0, 0, 0), 2)
-                cv2.rectangle(imgOutput, (x-20, y-20), (x + w + 20, y + h + 20), (0, 255, 0), 4)
-                
-                mp_drawing.draw_landmarks(imgOutput, hand_landmarks, mp_hands.HAND_CONNECTIONS)
-                cv2.imshow('Image', imgOutput)
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-    cv2.destroyAllWindows()
+def create_app(engine=None, engine_factory=InferenceEngine):
+    app = Flask(__name__)
+    app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BYTES
+    origins = [item.strip() for item in os.getenv(
+        "CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
+               if item.strip()]
+    CORS(app, resources={r"/interpret": {"origins": origins}})
+    inference_engine = engine
+    initialization_lock = threading.Lock()
 
-@app.route('/interpret', methods=['POST'])
-def interpret():
-    data = request.get_json()
-    image_data = re.sub('^data:image/.+;base64,', '', data['image'])
-    image = Image.open(BytesIO(base64.b64decode(image_data)))
-    image = np.array(image)
-    imgRGB = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    results = hands.process(imgRGB)
+    def get_engine():
+        nonlocal inference_engine
+        if inference_engine is None:
+            with initialization_lock:
+                if inference_engine is None:
+                    inference_engine = engine_factory()
+        return inference_engine
 
-    if results.multi_hand_landmarks:
-        for hand_landmarks in results.multi_hand_landmarks:
-            h, w, c = image.shape
-            x_min, y_min = w, h
-            x_max, y_max = 0, 0
+    @app.errorhandler(413)
+    def too_large(_error):
+        return jsonify(response_payload(error="Frame payload is too large")), 413
 
-            for lm in hand_landmarks.landmark:
-                x, y = int(lm.x * w), int(lm.y * h)
-                x_min, x_max = min(x_min, x), max(x_max, x)
-                y_min, y_max = min(y_min, y), max(y_max, y)
+    @app.post("/interpret")
+    def interpret():
+        try:
+            image = decode_frame(request.get_json(silent=True))
+        except RequestEntityTooLarge:
+            return jsonify(response_payload(error="Frame payload is too large")), 413
+        except FrameTooLargeError as exc:
+            return jsonify(response_payload(error=str(exc))), 413
+        except FrameValidationError as exc:
+            return jsonify(response_payload(error=str(exc))), 400
+        try:
+            prediction = get_engine().infer(image)
+        except Exception:
+            app.logger.exception("Inference failed")
+            return jsonify(response_payload(error="Inference is temporarily unavailable")), 500
+        if prediction is None:
+            return jsonify(response_payload()), 200
+        label, confidence = prediction
+        return jsonify(response_payload(True, label, prediction_text(label), confidence)), 200
 
-            x = max(0, x_min - 20)
-            y = max(0, y_min - 20)
-            w = min(image.shape[1], x_max - x_min + 40)
-            h = min(image.shape[0], y_max - y_min + 40)
+    return app
 
-            imgWhite = np.ones((300, 300, 3), np.uint8) * 255
-            imgCrop = image[y:y + h, x:x + w]
-            aspectRatio = h / w
 
-            if (aspectRatio > 1):
-                k = 300 / h
-                wCal = math.ceil(k * w)
-                imgResize = cv2.resize(imgCrop, (wCal, 300))
-                wGap = math.ceil((300 - wCal) / 2)
-                imgWhite[:, wGap: wCal + wGap] = imgResize
-            else:
-                k = 300 / w
-                hCal = math.ceil(k * h)
-                imgResize = cv2.resize(imgCrop, (300, hCal))
-                hGap = math.ceil((300 - hCal) / 2)
-                imgWhite[hGap: hCal + hGap, :] = imgResize
+app = create_app()
 
-            imgWhite_resized = cv2.resize(imgWhite, (224, 224))
-            imgWhite_resized = imgWhite_resized / 255.0
-            imgWhite_resized = np.expand_dims(imgWhite_resized, axis=0)
-
-            prediction = model.predict(imgWhite_resized)
-            index = np.argmax(prediction)
-            confidence = prediction[0][index] * 100  # Convert to percentage
-            prediction_buffer.append(index)
-            most_common_prediction = max(set(prediction_buffer), key=prediction_buffer.count)
-            most_common_confidence = prediction[0][most_common_prediction] * 100
-            
-            # Integrate NLP processing here
-            interpreted_text = convert_to_text(labels[most_common_prediction])
-            
-            return jsonify({'interpretedText': interpreted_text, 'confidence': most_common_confidence}), 200
-    return jsonify({'interpretedText': 'No hand detected'}), 200
-
-def convert_to_text(gesture_label):
-    # This function converts a gesture label to text using NLP logic or predefined mappings.
-    # Example: converting gesture labels to words or sentences
-    gesture_to_text = {
-        'Hello': 'Hello there!',
-        'Yes': 'Yes, I agree.',
-        'No': 'No, I disagree.',
-        'Thank you': 'Thank you very much.',
-        # Add more mappings as needed
-    }
-    return gesture_to_text.get(gesture_label, 'Gesture not recognized')
-
-if __name__ == '__main__':
-    app.run(debug=True)
+if __name__ == "__main__":
+    app.run(host=os.getenv("INFERENCE_HOST", "127.0.0.1"),
+            port=int(os.getenv("INFERENCE_PORT", "5001")), debug=False)
