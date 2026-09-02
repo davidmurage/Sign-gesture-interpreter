@@ -20,3 +20,15 @@ coverage/
 .coverage
 *.tmp
 *.log
+
+_bmad/
+_bmad-output/
+.agents
+.claude
+.cursor
+.gemini
+.github
+.opencode
+design-artifacts/
+docs/
+.tmp-matplotlib 
