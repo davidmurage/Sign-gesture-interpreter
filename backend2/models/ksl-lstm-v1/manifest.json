@@ -1,0 +1,13 @@
+{
+  "id": "ksl-lstm-v1",
+  "provider": "ksl-experimental",
+  "task": "isolated-word-ksl",
+  "source": "https://github.com/ibrahim-shedo/kenya-sing-language-translator-using-LSTM-model-deep-learning-/tree/6cc960d8ddea7bd3de71fb3ea68c2fe8be07cd11",
+  "source_commit": "6cc960d8ddea7bd3de71fb3ea68c2fe8be07cd11",
+  "artifact": "best_model.h5",
+  "sha256": "ee8b4fa39466aab45034ce7029bd555b220c7140375b691611b638492409f739",
+  "license": "MIT (as stated in the upstream README)",
+  "input_shape": [30, 1662],
+  "labels": ["me", "you", "friend", "name", "mine", "who", "how", "please", "help-me", "wait", "now", "home", "where", "give-me", "thank-you", "polite", "hello", "good", "mother", "father", "uncle", "cousing", "brother", "sister", "doughter", "parent", "relative", "yes", "no", "sorry"],
+  "limitations": "Experimental research checkpoint. Accuracy, signer independence, calibration, and KSL-expert validation are not established."
+}

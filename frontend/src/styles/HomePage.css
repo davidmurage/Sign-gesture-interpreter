@@ -1,73 +1,20 @@
-.App {
-  text-align: center;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
+.interpreter-page {
+  min-height: calc(100vh - 64px);
+  padding: clamp(1rem, 4vw, 3rem);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 2fr);
+  gap: clamp(1rem, 4vw, 3rem);
   align-items: center;
-  justify-content: center;
-  background-image: url('../assets/images/background2.jpg');
-  background-size: cover;
-  background-position: center;
-  color: white; /* Optional: To make text readable on background */
-
+  background: url('../assets/images/background2.jpg') center / cover;
 }
-
-.App-header {
-  background-color: #282c34;
-  padding: 1rem;
-  color: white;
+.interpreter-intro, .interpreter-panel { padding: clamp(1rem, 3vw, 2rem); border-radius: 12px; background: rgba(0, 0, 0, .72); color: #fff; }
+.camera-feed video { display: block; width: 100%; height: auto; max-height: 60vh; object-fit: contain; border-radius: 8px; background: #111; }
+.controls { margin: 1rem 0; }
+.controls button { min-height: 44px; padding: .65rem 1.25rem; border: 0; border-radius: 6px; background: #0b6edc; color: #fff; font-size: 1rem; cursor: pointer; }
+.controls button:hover, .controls button:focus-visible { background: #084f9d; outline: 3px solid #fff; outline-offset: 2px; }
+.result { min-height: 5rem; padding: 1rem; border: 1px solid #aaa; border-radius: 8px; background: rgba(0, 0, 0, .45); }
+.prediction { font-size: 1.25rem; font-weight: 700; }
+.error { color: #ffd2d2; font-weight: 700; }
+@media (max-width: 760px) {
+  .interpreter-page { grid-template-columns: 1fr; align-items: start; }
 }
-
-.camera-feed, .interpreted-text, .controls {
-  margin: 20px auto;
-  width: 80%;
-  max-width: 600px;
-  padding: 20px;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-h2 {
-  color: #fff;
-  margin-top: 5px;
-}
-
-.controls button {
-  padding: 10px 20px;
-  font-size: 16px;
-  margin: 10px;
-  border: none;
-  border-radius: 4px;
-  background-color: #007bff;
-  color: white;
-  cursor: pointer;
-}
-
-.controls button:hover {
-  background-color: #0056b3;
-}
-
-.container {
-  display: flex;
-  justify-content: space-between;
-  width: 90%;
-  max-width: 1200px;
-}
-
-.left-section {
-  flex: 1;
-  margin-right: 20px;
-  margin-top: 100px;
-  font-weight: bold;
-  color: black;
-}
-
-.right-section {
-  flex: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-
